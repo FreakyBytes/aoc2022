@@ -9,7 +9,7 @@ const SCORE_LOST: u32 = 0;
 const SCORE_DRAW: u32 = 3;
 const SCORE_WIN: u32 = 6;
 
-#[derive(PartialEq, Eq, Ord, Debug)]
+#[derive(PartialEq, Eq, Ord, Debug, Clone)]
 enum HandSign {
     ROCK,
     PAPER,
@@ -64,13 +64,54 @@ impl PartialOrd for HandSign {
     }
 }
 
+#[derive(Debug, PartialEq, Eq)]
+enum WinningInstructions {
+    LOSE,
+    DRAW,
+    WIN,
+}
+
+impl TryFrom<&str> for WinningInstructions {
+    type Error = anyhow::Error;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        match value {
+            "X" => Ok(Self::LOSE),
+            "Y" => Ok(Self::DRAW),
+            "Z" => Ok(Self::WIN),
+            _ => Err(anyhow::Error::msg(format!(
+                "Failed to parse '{}' into winning instruction!",
+                value
+            ))),
+        }
+    }
+}
+
+impl WinningInstructions {
+    pub fn to_handsign(&self, opponent: &HandSign) -> HandSign {
+        match self {
+            Self::DRAW => opponent.clone(),
+            Self::LOSE => match opponent {
+                HandSign::ROCK => HandSign::SCISSOR,
+                HandSign::PAPER => HandSign::ROCK,
+                HandSign::SCISSOR => HandSign::PAPER,
+            },
+            Self::WIN => match opponent {
+                HandSign::ROCK => HandSign::PAPER,
+                HandSign::PAPER => HandSign::SCISSOR,
+                HandSign::SCISSOR => HandSign::ROCK,
+            },
+        }
+    }
+}
+
 fn main() -> Result<(), Box<dyn Error>> {
     let file_name = std::env::args().nth(1).expect("No input file supplied!");
     let reader = BufReader::new(File::open(file_name)?);
 
     let mut total_score: u32 = 0;
     for line in reader.lines() {
-        let (opponent, me): (HandSign, HandSign) = {
+        let (opponent, me): (HandSign, WinningInstructions) = {
             let line = line.unwrap();
             let mut split = line.splitn(2, " ");
             (
@@ -78,6 +119,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 split.next().unwrap().try_into().unwrap(),
             )
         };
+        let me = me.to_handsign(&opponent);
 
         let mut score: u32 = me.to_score();
         if me > opponent {
