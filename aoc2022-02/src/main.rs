@@ -112,11 +112,17 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut total_score: u32 = 0;
     for line in reader.lines() {
         let (opponent, me): (HandSign, WinningInstructions) = {
-            let line = line.unwrap();
+            let line = line?;
             let mut split = line.splitn(2, " ");
             (
-                split.next().unwrap().try_into().unwrap(),
-                split.next().unwrap().try_into().unwrap(),
+                split
+                    .next()
+                    .ok_or(anyhow::Error::msg("Insufficient elements"))?
+                    .try_into()?,
+                split
+                    .next()
+                    .ok_or(anyhow::Error::msg("Insufficient elements"))?
+                    .try_into()?,
             )
         };
         let me = me.to_handsign(&opponent);
