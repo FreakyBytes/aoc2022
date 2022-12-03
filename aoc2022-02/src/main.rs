@@ -113,15 +113,15 @@ fn main() -> Result<(), Box<dyn Error>> {
     for line in reader.lines() {
         let (opponent, me): (HandSign, WinningInstructions) = {
             let line = line?;
-            let mut split = line.splitn(2, " ");
+            let mut split = line.splitn(2, ' ');
             (
                 split
                     .next()
-                    .ok_or(anyhow::Error::msg("Insufficient elements"))?
+                    .ok_or_else(|| anyhow::Error::msg("Insufficient elements"))?
                     .try_into()?,
                 split
                     .next()
-                    .ok_or(anyhow::Error::msg("Insufficient elements"))?
+                    .ok_or_else(|| anyhow::Error::msg("Insufficient elements"))?
                     .try_into()?,
             )
         };
