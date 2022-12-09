@@ -103,6 +103,18 @@ impl FromStr for Step {
     }
 }
 
+fn shift_knot_buffer(knots: &mut [Position2D]) {
+    for idx in 1..knots.len() - 1 {
+        knots[idx - 1] = knots[idx].clone();
+    }
+}
+
+fn add_knots_to_tracker(positions: &mut HashSet<Position2D>, knots: &[Position2D]) {
+    for idx in 0..knots.len() {
+        positions.insert(knots[idx].clone());
+    }
+}
+
 fn main() -> Result<(), Box<dyn Error>> {
     let file_name = std::env::args().nth(1).expect("No input file supplied!");
     let steps = BufReader::new(File::open(file_name)?)
@@ -114,20 +126,35 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let mut tail_positions = HashSet::<Position2D>::new();
     let mut head = Position2D::default();
-    let mut tail = head.clone();
-    tail_positions.insert(tail.clone());
+    let mut knots: [Position2D; 11] = [
+        head.clone(),
+        head.clone(),
+        head.clone(),
+        head.clone(),
+        head.clone(),
+        head.clone(),
+        head.clone(),
+        head.clone(),
+        head.clone(),
+        head.clone(),
+        head.clone(),
+    ];
+    // let mut tail = head.clone();
+    tail_positions.insert(head.clone());
 
     for step in steps.iter() {
         println!("==== {step:?} ====");
         for _ in 0..step.get_length() {
             let prev_head = head.clone();
             head.apply_step_with_length_one(step);
-            if !head.is_adjacent_to(&tail) {
-                tail = prev_head;
-                tail_positions.insert(tail.clone());
-                println!("na");
+            if !head.is_adjacent_to(&knots[knots.len() - 1]) {
+                shift_knot_buffer(&mut knots);
+                knots[knots.len() - 1] = prev_head;
+                add_knots_to_tracker(&mut tail_positions, &knots);
+                // tail_positions.insert(tail.clone());
+                // println!("na");
             }
-            println!("head: {head:?}   | tail: {tail:?}");
+            println!("head: {head:?}   | knots: {knots:?}");
         }
     }
 
