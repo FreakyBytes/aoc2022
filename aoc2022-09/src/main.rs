@@ -29,6 +29,44 @@ impl Position2D {
             Step::Right(_) => self.x += 1,
         }
     }
+
+    fn follow_other(&mut self, other: &Self, step: &Step) {
+        match (
+            step,
+            (self.x - other.x).clamp(-1, 1),
+            (self.y - other.y).clamp(-1, 1),
+        ) {
+            (_, 0, 0) => {}
+            // up
+            (_, 0, -1) => {
+                // self.x = other.x;
+                self.y = other.y - 1;
+            }
+            // down
+            (_, 0, 1) => {
+                // self.x = other.x;
+                self.y = other.y + 1;
+            }
+            // left
+            (_, -1, 0) => {
+                self.x = other.x - 1;
+                // self.y = other.y;
+            }
+            // right
+            (_, 1, 0) => {
+                self.x = other.x + 1;
+            }
+            // bottom right
+            (_, 1, 1) => {
+                self.x = other.x - 1;
+                self.y = other.y;
+            }
+            // top right
+            (_, 1, -1) => {}
+
+            _ => panic!(),
+        }
+    }
 }
 
 // impl Add<&Step> for Position2D {
@@ -92,7 +130,7 @@ impl FromStr for Step {
     type Err = anyhow::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s.split_once(" ") {
+        match s.split_once(' ') {
             Some(("U", length)) => Ok(Self::Up(length.parse()?)),
             Some(("D", length)) => Ok(Self::Down(length.parse()?)),
             Some(("L", length)) => Ok(Self::Left(length.parse()?)),
@@ -104,14 +142,15 @@ impl FromStr for Step {
 }
 
 fn shift_knot_buffer(knots: &mut [Position2D]) {
-    for idx in 1..knots.len() - 1 {
-        knots[idx - 1] = knots[idx].clone();
+    for idx in 1..knots.len() {
+        knots[idx - 1].x = knots[idx].x;
+        knots[idx - 1].y = knots[idx].y;
     }
 }
 
 fn add_knots_to_tracker(positions: &mut HashSet<Position2D>, knots: &[Position2D]) {
-    for idx in 0..knots.len() {
-        positions.insert(knots[idx].clone());
+    for knot in knots.iter() {
+        positions.insert(knot.clone());
     }
 }
 
@@ -140,7 +179,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         head.clone(),
     ];
     // let mut tail = head.clone();
-    tail_positions.insert(head.clone());
+    add_knots_to_tracker(&mut tail_positions, &knots);
 
     for step in steps.iter() {
         println!("==== {step:?} ====");
@@ -152,7 +191,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 knots[knots.len() - 1] = prev_head;
                 add_knots_to_tracker(&mut tail_positions, &knots);
                 // tail_positions.insert(tail.clone());
-                // println!("na");
+                print!("-> ");
             }
             println!("head: {head:?}   | knots: {knots:?}");
         }
