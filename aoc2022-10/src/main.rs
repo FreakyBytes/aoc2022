@@ -76,5 +76,20 @@ fn main() -> Result<(), Box<dyn Error>> {
         signal_strength.iter().sum::<i32>()
     );
 
+    println!();
+    for idx in 0..240 {
+        let x = x_over_time[idx];
+        let col = (idx % 40) as i32;
+
+        if (x - col).abs() <= 1 {
+            print!("#");
+        } else {
+            print!(".");
+        }
+        if col == 39 {
+            println!();
+        }
+    }
+
     Ok(())
 }
