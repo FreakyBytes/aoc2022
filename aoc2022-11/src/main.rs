@@ -1,12 +1,13 @@
 use std::{
     collections::{HashMap, VecDeque},
     sync::{Arc, Mutex},
+    time::Instant,
 };
 
-use anyhow::{Context, Error};
+use anyhow::Error;
 use chumsky::Parser;
-use num::BigInt;
 use parser::{Expr, MonkeyAction, MonkeyBool, MonkeyLang, MonkeyTestCondition};
+use rug::Integer;
 
 use crate::parser::{monkey_parser, print_parser_error};
 
@@ -15,10 +16,10 @@ mod parser;
 #[derive(Debug, Default, Clone)]
 struct Monkey {
     id: u32,
-    items: VecDeque<BigInt>,
+    items: VecDeque<Integer>,
     activity: u64,
     operation_expr: Expr,
-    divisible_by: u64,
+    divisible_by: u32,
     target_if_true: u32,
     target_if_false: u32,
 }
@@ -41,7 +42,7 @@ impl TryFrom<&MonkeyLang> for Monkey {
                         ))
                     }
                     MonkeyLang::StartingItems(si) => {
-                        monkey.items = VecDeque::from_iter(si.iter().map(|i| BigInt::from(*i)));
+                        monkey.items = VecDeque::from_iter(si.iter().map(|i| Integer::from(*i)));
                     }
                     MonkeyLang::Operation(expr) => monkey.operation_expr = expr.to_owned(),
                     MonkeyLang::Test {
@@ -127,9 +128,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // let mut monkey_activity: HashMap<u32, u32> =
     //     sorted_keys.iter().map(|idx| (*idx, 0_u32)).collect();
 
-    let big_null: BigInt = BigInt::from(0);
+    let start = Instant::now();
     for round in 1..=10000 {
-        if round == 1 || round == 20 || round % 1000 == 0 {
+        if round == 1 || round == 20 || round % 100 == 0 {
             println!("==== Round {round:02} ====");
             println!();
         }
@@ -139,13 +140,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let mut monkey = monkeys
                 .get(idx)
                 .unwrap()
-                .lock()
+                .try_lock()
                 .map_err(|_| Error::msg("Failed to acquire mutex lock for source monkey"))?;
 
             while let Some(item) = monkey.items.pop_front() {
                 // println!("  Monkey inspects an item with worry level of {item}");
                 monkey.activity += 1;
-                let mut worry_level = monkey.operation_expr.eval_big(&item);
+                let worry_level = monkey.operation_expr.eval_big(&item);
                 // println!("    Applying expression, new worry level is {worry_level}");
                 // worry_level /= 3;
                 // println!(
@@ -153,7 +154,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 // );
 
                 let divisible_by = monkey.divisible_by;
-                let target = if &worry_level % divisible_by == big_null {
+                let target = if worry_level.is_divisible_u(divisible_by) {
                     // println!(
                     //     "    Item with worry level {worry_level} is dividable by {divisible_by}"
                     // );
@@ -169,9 +170,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 if target == *idx {
                     monkey.items.push_back(worry_level);
                 } else {
-                    let mut target_monkey = monkeys.get(&target).unwrap().lock().map_err(|_| {
-                        Error::msg("Failed to acquire mutex lock for target monkey")
-                    })?;
+                    let mut target_monkey =
+                        monkeys.get(&target).unwrap().try_lock().map_err(|_| {
+                            Error::msg("Failed to acquire mutex lock for target monkey")
+                        })?;
                     target_monkey.items.push_back(worry_level);
                 }
             }
@@ -180,7 +182,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         if round == 1 || round == 20 || round % 1000 == 0 {
             for idx in sorted_keys.iter() {
-                let monkey = monkeys.get(idx).unwrap().lock().map_err(|_| {
+                let monkey = monkeys.get(idx).unwrap().try_lock().map_err(|_| {
                     Error::msg("Failed to acquire mutex lock for counting monkey activity")
                 })?;
                 println!(
@@ -188,7 +190,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     activity = monkey.activity
                 );
             }
-
+        }
+        if round == 1 || round == 20 || round % 100 == 0 {
+            println!("Elapsed: {:.4}s", (Instant::now() - start).as_secs_f32());
             println!();
         }
     }
@@ -199,7 +203,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let monkey = monkeys
                 .get(idx)
                 .unwrap()
-                .lock()
+                .try_lock()
                 .map_err(|_| Error::msg("Failed to acquire mutex lock for monkey"))?;
 
             Ok((*idx, monkey.activity))

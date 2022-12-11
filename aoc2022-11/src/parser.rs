@@ -1,5 +1,6 @@
 use ariadne::{Color, Fmt, Label, Report, ReportKind, Source};
 use chumsky::{prelude::*, text::Character};
+use rug::Integer;
 
 fn char_to_string(c: &char) -> String {
     if c.is_whitespace() {
@@ -100,9 +101,9 @@ impl Expr {
         }
     }
 
-    pub fn eval_big(&self, old: &num::BigInt) -> num::BigInt {
+    pub fn eval_big(&self, old: &Integer) -> Integer {
         match self {
-            Expr::Num(val) => num::BigInt::from(*val),
+            Expr::Num(val) => Integer::from(*val),
             Expr::Add(a, b) => a.eval_big(old) + b.eval_big(old),
             Expr::Mul(a, b) => a.eval_big(old) * b.eval_big(old),
             Expr::Assign(lhs, rhs) if Expr::New == **lhs => rhs.eval_big(old),
@@ -134,7 +135,7 @@ pub enum MonkeyLang {
     StartingItems(Vec<u64>),
     Operation(Expr),
     Test {
-        divisible_by: u64,
+        divisible_by: u32,
         conditions: Vec<MonkeyTestCondition>,
     },
 }
@@ -246,7 +247,7 @@ pub fn monkey_parser() -> impl Parser<char, Vec<MonkeyLang>, Error = Simple<char
     let divisible_by = just("divisible by")
         // .padded()
         .then(single_line_whitespace)
-        .then(int)
+        .then(uint)
         .map(|(_, i)| i);
 
     let test = just("Test:")
