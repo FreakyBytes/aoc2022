@@ -14,10 +14,10 @@ mod parser;
 #[derive(Debug, Default, Clone)]
 struct Monkey {
     id: u32,
-    items: VecDeque<i64>,
-    activity: u32,
+    items: VecDeque<u64>,
+    activity: u64,
     operation_expr: Expr,
-    divisible_by: i64,
+    divisible_by: u64,
     target_if_true: u32,
     target_if_false: u32,
 }
@@ -126,7 +126,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // let mut monkey_activity: HashMap<u32, u32> =
     //     sorted_keys.iter().map(|idx| (*idx, 0_u32)).collect();
 
-    for round in 1..=20 {
+    for round in 1..=1000 {
         println!("==== Round {round:02} ====");
         println!();
 
@@ -160,10 +160,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 monkey.activity += 1;
                 let mut worry_level = monkey.operation_expr.eval(item);
                 println!("    Applying expression, new worry level is {worry_level}");
-                worry_level /= 3;
-                println!(
-                    "    Monkey gets bored with item. Worry level is divided by 3 to {worry_level}"
-                );
+                // worry_level /= 3;
+                // println!(
+                //     "    Monkey gets bored with item. Worry level is divided by 3 to {worry_level}"
+                // );
+
                 let divisible_by = monkey.divisible_by;
                 let target = if worry_level % divisible_by == 0 {
                     println!(
@@ -209,7 +210,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("Monkey {idx} inspected items {activity} times.")
     }
 
-    let monkey_business_level: u32 = activity_rank
+    let monkey_business_level: u64 = activity_rank
         .iter()
         .take(2)
         .map(|(_, a)| *a)

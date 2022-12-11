@@ -72,7 +72,7 @@ pub fn print_parser_error(input: &str, err: Simple<char>) {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Expr {
-    Num(i64),
+    Num(u64),
     Add(Box<Expr>, Box<Expr>),
     Mul(Box<Expr>, Box<Expr>),
     Assign(Box<Expr>, Box<Expr>),
@@ -87,7 +87,7 @@ impl Default for Expr {
 }
 
 impl Expr {
-    pub fn eval(&self, old: i64) -> i64 {
+    pub fn eval(&self, old: u64) -> u64 {
         match self {
             Expr::Num(val) => *val,
             Expr::Add(a, b) => a.eval(old) + b.eval(old),
@@ -118,10 +118,10 @@ pub struct MonkeyTestCondition(pub(crate) MonkeyBool, pub(crate) MonkeyAction);
 #[derive(Debug, Clone)]
 pub enum MonkeyLang {
     MonkeyDefinition(u32, Vec<MonkeyLang>),
-    StartingItems(Vec<i64>),
+    StartingItems(Vec<u64>),
     Operation(Expr),
     Test {
-        divisible_by: i64,
+        divisible_by: u64,
         conditions: Vec<MonkeyTestCondition>,
     },
 }
@@ -182,7 +182,7 @@ pub fn monkey_parser() -> impl Parser<char, Vec<MonkeyLang>, Error = Simple<char
             .repeated()
             .ignored();
     let int = text::int(10)
-        .map(|s: String| s.parse::<i64>().unwrap())
+        .map(|s: String| s.parse::<u64>().unwrap())
         .padded_by(single_line_whitespace);
     let uint = text::int(10)
         .map(|s: String| s.parse::<u32>().unwrap())
