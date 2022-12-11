@@ -1,7 +1,11 @@
-use std::error::Error;
+use std::{
+    collections::{HashMap, VecDeque},
+    sync::{Arc, Mutex},
+};
 
+use anyhow::{Context, Error};
 use chumsky::Parser;
-use parser::Expr;
+use parser::{Expr, MonkeyAction, MonkeyBool, MonkeyLang, MonkeyTestCondition};
 
 use crate::parser::{monkey_parser, print_parser_error};
 
@@ -9,27 +13,72 @@ mod parser;
 
 #[derive(Debug, Default, Clone)]
 struct Monkey {
-    starting_items: Vec<u32>,
-    operation_str: Expr,
-    divisible_by: u32,
-    target_if_true: usize,
-    target_if_false: usize,
+    id: u32,
+    items: VecDeque<i64>,
+    activity: u32,
+    operation_expr: Expr,
+    divisible_by: i64,
+    target_if_true: u32,
+    target_if_false: u32,
 }
 
-fn eval_expr(expr: &Expr, old: i64) -> i64 {
-    match expr {
-        Expr::Num(val) => *val,
-        Expr::Add(a, b) => eval_expr(a, old) + eval_expr(b, old),
-        Expr::Mul(a, b) => eval_expr(a, old) * eval_expr(b, old),
-        Expr::Assign(lhs, rhs) if Expr::New == **lhs => eval_expr(rhs, old),
-        // Expr::Assign(Expr::New, rhs) => eval_expr(*rhs, old),
-        Expr::Assign(_, _) => panic!("Only assignments where lhs equals new are supported!"),
-        Expr::Old => old,
-        Expr::New => panic!("Can't eval new!"),
+impl TryFrom<&MonkeyLang> for Monkey {
+    type Error = Error;
+
+    fn try_from(value: &MonkeyLang) -> Result<Self, Self::Error> {
+        if let MonkeyLang::MonkeyDefinition(id, items) = value {
+            let mut monkey = Self {
+                id: *id,
+                ..Default::default()
+            };
+
+            for item in items.iter() {
+                match item {
+                    MonkeyLang::MonkeyDefinition(_, _) => {
+                        return Err(Self::Error::msg(
+                            "Nested MonkeyDefinitions are not supported!",
+                        ))
+                    }
+                    MonkeyLang::StartingItems(si) => {
+                        monkey.items = VecDeque::from_iter(si.iter().cloned())
+                    }
+                    MonkeyLang::Operation(expr) => monkey.operation_expr = expr.to_owned(),
+                    MonkeyLang::Test {
+                        divisible_by,
+                        conditions,
+                    } => {
+                        monkey.divisible_by = *divisible_by;
+                        for cond in conditions.iter() {
+                            match cond {
+                                MonkeyTestCondition(
+                                    MonkeyBool::True,
+                                    MonkeyAction::ThrowToMonkey(target),
+                                ) => monkey.target_if_true = *target,
+                                MonkeyTestCondition(
+                                    MonkeyBool::False,
+                                    MonkeyAction::ThrowToMonkey(target),
+                                ) => monkey.target_if_false = *target,
+                                // _ => {
+                                //     return Err(Self::Error::msg(format!(
+                                //         "Unknown MonkeyTestCondition! `{cond:?}`"
+                                //     )));
+                                // }
+                            }
+                        }
+                    }
+                }
+            }
+
+            Ok(monkey)
+        } else {
+            Err(Self::Error::msg(format!(
+                "Value is not a MonkeyDefinition: `{value:?}`"
+            )))
+        }
     }
 }
 
-fn main() -> Result<(), Box<dyn Error>> {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     let file_name = std::env::args().nth(1).expect("No input file supplied!");
     let input = std::fs::read_to_string(file_name)?;
     //     let input = r#"
@@ -58,6 +107,115 @@ fn main() -> Result<(), Box<dyn Error>> {
         anyhow::Error::msg("Failed to parse input!")
     })?;
     println!("\n{tokens:#?}");
+    let mut monkeys = tokens
+        .iter()
+        .map(|t| -> Result<(u32, Arc<Mutex<Monkey>>), Error> {
+            let m: Monkey = t.try_into()?;
+            Ok((m.id, Arc::new(Mutex::new(m))))
+        })
+        .collect::<Result<HashMap<_, _>, _>>()?;
+    // monkeys.sort_by(|a, b| a.id.cmp(&b.id));
+
+    println!("\n{monkeys:#?}");
+    let sorted_keys = {
+        let mut keys = monkeys.keys().cloned().collect::<Vec<_>>();
+        keys.sort();
+        keys
+    };
+
+    // let mut monkey_activity: HashMap<u32, u32> =
+    //     sorted_keys.iter().map(|idx| (*idx, 0_u32)).collect();
+
+    for round in 1..=20 {
+        println!("==== Round {round:02} ====");
+        println!();
+
+        for idx in sorted_keys.iter() {
+            println!("Monkey {idx}:");
+            let mut monkey = monkeys
+                .get(idx)
+                .unwrap()
+                .lock()
+                .map_err(|_| Error::msg("Failed to acquire mutex lock for source monkey"))?;
+            // let (operation_expr, divisible_by, target_if_true, target_if_false) = {
+            //     let monkey = monkey_lock
+            //         .lock()
+            //         .map_err(|_| Error::msg("Failed to acquire mutex lock for source monkey"))?;
+            //     (
+            //         monkey.operation_expr.clone(),
+            //         monkey.divisible_by,
+            //         monkey.target_if_true,
+            //         monkey.target_if_false,
+            //     )
+            // };
+            while let Some(item) = monkey.items.pop_front() {
+                // while let Some(item) = {
+                //     let mut monkey =
+                //         monkeys.get_mut(idx).unwrap().lock().map_err(|_| {
+                //             Error::msg("Failed to acquire mutex lock for popping monkey item")
+                //         })?;
+                //     monkey.items.pop_front()
+                // } {
+                println!("  Monkey inspects an item with worry level of {item}");
+                monkey.activity += 1;
+                let mut worry_level = monkey.operation_expr.eval(item);
+                println!("    Applying expression, new worry level is {worry_level}");
+                worry_level /= 3;
+                println!(
+                    "    Monkey gets bored with item. Worry level is divided by 3 to {worry_level}"
+                );
+                let divisible_by = monkey.divisible_by;
+                let target = if worry_level % divisible_by == 0 {
+                    println!(
+                        "    Item with worry level {worry_level} is dividable by {divisible_by}"
+                    );
+                    monkey.target_if_true
+                } else {
+                    println!(
+                    "    Item with worry level {worry_level} is _not_ dividable by {divisible_by}"
+                );
+                    monkey.target_if_false
+                };
+                println!("    Item with worry level {worry_level} is thrown to monkey {target}");
+                if target == *idx {
+                    monkey.items.push_back(worry_level);
+                } else {
+                    let mut target_monkey = monkeys.get(&target).unwrap().lock().map_err(|_| {
+                        Error::msg("Failed to acquire mutex lock for target monkey")
+                    })?;
+                    target_monkey.items.push_back(worry_level);
+                }
+            }
+
+            println!();
+        }
+    }
+
+    let mut activity_rank = sorted_keys
+        .iter()
+        .map(|idx| {
+            let monkey = monkeys
+                .get(idx)
+                .unwrap()
+                .lock()
+                .map_err(|_| Error::msg("Failed to acquire mutex lock for monkey"))?;
+
+            Ok((*idx, monkey.activity))
+        })
+        .collect::<Result<Vec<_>, Error>>()?;
+
+    activity_rank.sort_by(|(_, a), (_, b)| b.cmp(a));
+    for (idx, activity) in activity_rank.iter() {
+        println!("Monkey {idx} inspected items {activity} times.")
+    }
+
+    let monkey_business_level: u32 = activity_rank
+        .iter()
+        .take(2)
+        .map(|(_, a)| *a)
+        .reduce(|a, b| a * b)
+        .unwrap();
+    println!("Level of Monkey Business: {monkey_business_level}");
 
     Ok(())
 }

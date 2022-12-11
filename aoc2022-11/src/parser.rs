@@ -86,6 +86,21 @@ impl Default for Expr {
     }
 }
 
+impl Expr {
+    pub fn eval(&self, old: i64) -> i64 {
+        match self {
+            Expr::Num(val) => *val,
+            Expr::Add(a, b) => a.eval(old) + b.eval(old),
+            Expr::Mul(a, b) => a.eval(old) * b.eval(old),
+            Expr::Assign(lhs, rhs) if Expr::New == **lhs => rhs.eval(old),
+            // Expr::Assign(Expr::New, rhs) => eval_expr(*rhs, old),
+            Expr::Assign(_, _) => panic!("Only assignments where lhs equals new are supported!"),
+            Expr::Old => old,
+            Expr::New => panic!("Can't eval new!"),
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub enum MonkeyAction {
     ThrowToMonkey(u32),
@@ -98,7 +113,7 @@ pub enum MonkeyBool {
 }
 
 #[derive(Debug, Clone)]
-pub struct MonkeyTestCondition(MonkeyBool, MonkeyAction);
+pub struct MonkeyTestCondition(pub(crate) MonkeyBool, pub(crate) MonkeyAction);
 
 #[derive(Debug, Clone)]
 pub enum MonkeyLang {
