@@ -99,6 +99,19 @@ impl Expr {
             Expr::New => panic!("Can't eval new!"),
         }
     }
+
+    pub fn eval_big(&self, old: &num::BigInt) -> num::BigInt {
+        match self {
+            Expr::Num(val) => num::BigInt::from(*val),
+            Expr::Add(a, b) => a.eval_big(old) + b.eval_big(old),
+            Expr::Mul(a, b) => a.eval_big(old) * b.eval_big(old),
+            Expr::Assign(lhs, rhs) if Expr::New == **lhs => rhs.eval_big(old),
+            // Expr::Assign(Expr::New, rhs) => eval_expr(*rhs, old),
+            Expr::Assign(_, _) => panic!("Only assignments where lhs equals new are supported!"),
+            Expr::Old => old.clone(),
+            Expr::New => panic!("Can't eval new!"),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]

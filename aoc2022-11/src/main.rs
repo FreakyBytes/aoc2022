@@ -5,6 +5,7 @@ use std::{
 
 use anyhow::{Context, Error};
 use chumsky::Parser;
+use num::BigInt;
 use parser::{Expr, MonkeyAction, MonkeyBool, MonkeyLang, MonkeyTestCondition};
 
 use crate::parser::{monkey_parser, print_parser_error};
@@ -14,7 +15,7 @@ mod parser;
 #[derive(Debug, Default, Clone)]
 struct Monkey {
     id: u32,
-    items: VecDeque<u64>,
+    items: VecDeque<BigInt>,
     activity: u64,
     operation_expr: Expr,
     divisible_by: u64,
@@ -40,7 +41,7 @@ impl TryFrom<&MonkeyLang> for Monkey {
                         ))
                     }
                     MonkeyLang::StartingItems(si) => {
-                        monkey.items = VecDeque::from_iter(si.iter().cloned())
+                        monkey.items = VecDeque::from_iter(si.iter().map(|i| BigInt::from(*i)));
                     }
                     MonkeyLang::Operation(expr) => monkey.operation_expr = expr.to_owned(),
                     MonkeyLang::Test {
@@ -126,58 +127,45 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // let mut monkey_activity: HashMap<u32, u32> =
     //     sorted_keys.iter().map(|idx| (*idx, 0_u32)).collect();
 
-    for round in 1..=1000 {
-        println!("==== Round {round:02} ====");
-        println!();
+    let big_null: BigInt = BigInt::from(0);
+    for round in 1..=10000 {
+        if round == 1 || round == 20 || round % 1000 == 0 {
+            println!("==== Round {round:02} ====");
+            println!();
+        }
 
         for idx in sorted_keys.iter() {
-            println!("Monkey {idx}:");
+            // println!("Monkey {idx}:");
             let mut monkey = monkeys
                 .get(idx)
                 .unwrap()
                 .lock()
                 .map_err(|_| Error::msg("Failed to acquire mutex lock for source monkey"))?;
-            // let (operation_expr, divisible_by, target_if_true, target_if_false) = {
-            //     let monkey = monkey_lock
-            //         .lock()
-            //         .map_err(|_| Error::msg("Failed to acquire mutex lock for source monkey"))?;
-            //     (
-            //         monkey.operation_expr.clone(),
-            //         monkey.divisible_by,
-            //         monkey.target_if_true,
-            //         monkey.target_if_false,
-            //     )
-            // };
+
             while let Some(item) = monkey.items.pop_front() {
-                // while let Some(item) = {
-                //     let mut monkey =
-                //         monkeys.get_mut(idx).unwrap().lock().map_err(|_| {
-                //             Error::msg("Failed to acquire mutex lock for popping monkey item")
-                //         })?;
-                //     monkey.items.pop_front()
-                // } {
-                println!("  Monkey inspects an item with worry level of {item}");
+                // println!("  Monkey inspects an item with worry level of {item}");
                 monkey.activity += 1;
-                let mut worry_level = monkey.operation_expr.eval(item);
-                println!("    Applying expression, new worry level is {worry_level}");
+                let mut worry_level = monkey.operation_expr.eval_big(&item);
+                // println!("    Applying expression, new worry level is {worry_level}");
                 // worry_level /= 3;
                 // println!(
                 //     "    Monkey gets bored with item. Worry level is divided by 3 to {worry_level}"
                 // );
 
                 let divisible_by = monkey.divisible_by;
-                let target = if worry_level % divisible_by == 0 {
-                    println!(
-                        "    Item with worry level {worry_level} is dividable by {divisible_by}"
-                    );
+                let target = if &worry_level % divisible_by == big_null {
+                    // println!(
+                    //     "    Item with worry level {worry_level} is dividable by {divisible_by}"
+                    // );
                     monkey.target_if_true
                 } else {
-                    println!(
-                    "    Item with worry level {worry_level} is _not_ dividable by {divisible_by}"
-                );
+                    //     println!(
+                    //     "    Item with worry level {worry_level} is _not_ dividable by {divisible_by}"
+                    // );
                     monkey.target_if_false
                 };
-                println!("    Item with worry level {worry_level} is thrown to monkey {target}");
+
+                // println!("    Item with worry level {worry_level} is thrown to monkey {target}");
                 if target == *idx {
                     monkey.items.push_back(worry_level);
                 } else {
@@ -186,6 +174,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     })?;
                     target_monkey.items.push_back(worry_level);
                 }
+            }
+            // println!();
+        }
+
+        if round == 1 || round == 20 || round % 1000 == 0 {
+            for idx in sorted_keys.iter() {
+                let monkey = monkeys.get(idx).unwrap().lock().map_err(|_| {
+                    Error::msg("Failed to acquire mutex lock for counting monkey activity")
+                })?;
+                println!(
+                    "Monkey {idx} inspected items {activity} times.",
+                    activity = monkey.activity
+                );
             }
 
             println!();
