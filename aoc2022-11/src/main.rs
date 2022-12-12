@@ -16,10 +16,10 @@ mod parser;
 #[derive(Debug, Default, Clone)]
 struct Monkey {
     id: u32,
-    items: VecDeque<Integer>,
+    items: VecDeque<u64>,
     activity: u64,
     operation_expr: Expr,
-    divisible_by: u32,
+    divisible_by: u64,
     target_if_true: u32,
     target_if_false: u32,
 }
@@ -42,14 +42,14 @@ impl TryFrom<&MonkeyLang> for Monkey {
                         ))
                     }
                     MonkeyLang::StartingItems(si) => {
-                        monkey.items = VecDeque::from_iter(si.iter().map(|i| Integer::from(*i)));
+                        monkey.items = VecDeque::from_iter(si.iter().map(|i| *i));
                     }
                     MonkeyLang::Operation(expr) => monkey.operation_expr = expr.to_owned(),
                     MonkeyLang::Test {
                         divisible_by,
                         conditions,
                     } => {
-                        monkey.divisible_by = *divisible_by;
+                        monkey.divisible_by = *divisible_by as u64;
                         for cond in conditions.iter() {
                             match cond {
                                 MonkeyTestCondition(
@@ -131,6 +131,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     const TOTAL_ROUNDS: i32 = 10_000;
     let start = Instant::now();
     let mut last_report = Instant::now();
+    let group_size = monkeys
+        .values()
+        .map(|m| m.try_lock().unwrap().divisible_by)
+        .reduce(|a, b| a * b)
+        .unwrap();
     for round in 1..=TOTAL_ROUNDS {
         //     println!("==== Round {round:02} ====");
         //     println!();
@@ -147,15 +152,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             while let Some(item) = monkey.items.pop_front() {
                 // println!("  Monkey inspects an item with worry level of {item}");
                 monkey.activity += 1;
-                let worry_level = monkey.operation_expr.eval_big(&item);
+                let mut worry_level = monkey.operation_expr.eval(item);
+                worry_level = worry_level % group_size;
                 // println!("    Applying expression, new worry level is {worry_level}");
                 // worry_level /= 3;
                 // println!(
                 //     "    Monkey gets bored with item. Worry level is divided by 3 to {worry_level}"
                 // );
 
-                let divisible_by = monkey.divisible_by;
-                let target = if worry_level.is_divisible_u(divisible_by) {
+                let divisible_by = monkey.divisible_by as u64;
+                let target = if worry_level % divisible_by == 0 {
                     // println!(
                     //     "    Item with worry level {worry_level} is dividable by {divisible_by}"
                     // );
@@ -197,7 +203,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         if round == 1
             || round == 20
             || round % 100 == 0
-            || (Instant::now() - last_report).as_secs() > 15
+            || (Instant::now() - last_report).as_secs() > 30
         {
             let round_duration = (Instant::now() - round_start).as_secs_f32();
             let avg = elapsed / round as f32;

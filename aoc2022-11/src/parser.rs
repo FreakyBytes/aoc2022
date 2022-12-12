@@ -101,6 +101,19 @@ impl Expr {
         }
     }
 
+    pub fn reverse_eval(&self, old: u64) -> u64 {
+        match self {
+            Expr::Num(val) => *val,
+            Expr::Add(a, b) => a.reverse_eval(old) - b.reverse_eval(old),
+            Expr::Mul(a, b) => a.reverse_eval(old) / b.reverse_eval(old),
+            Expr::Assign(lhs, rhs) if Expr::New == **lhs => rhs.reverse_eval(old),
+            // Expr::Assign(Expr::New, rhs) => eval_expr(*rhs, old),
+            Expr::Assign(_, _) => panic!("Only assignments where lhs equals new are supported!"),
+            Expr::Old => old,
+            Expr::New => panic!("Can't eval new!"),
+        }
+    }
+
     pub fn eval_big(&self, old: &Integer) -> Integer {
         match self {
             Expr::Num(val) => Integer::from(*val),
