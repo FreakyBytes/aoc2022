@@ -128,12 +128,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // let mut monkey_activity: HashMap<u32, u32> =
     //     sorted_keys.iter().map(|idx| (*idx, 0_u32)).collect();
 
+    const TOTAL_ROUNDS: i32 = 10_000;
     let start = Instant::now();
-    for round in 1..=10000 {
-        if round == 1 || round == 20 || round % 100 == 0 {
-            println!("==== Round {round:02} ====");
-            println!();
-        }
+    let mut last_report = Instant::now();
+    for round in 1..=TOTAL_ROUNDS {
+        //     println!("==== Round {round:02} ====");
+        //     println!();
+        let round_start = Instant::now();
 
         for idx in sorted_keys.iter() {
             // println!("Monkey {idx}:");
@@ -180,7 +181,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             // println!();
         }
 
+        let elapsed = (Instant::now() - start).as_secs_f32();
         if round == 1 || round == 20 || round % 1000 == 0 {
+            println!("==== Round {round:02} ====");
             for idx in sorted_keys.iter() {
                 let monkey = monkeys.get(idx).unwrap().try_lock().map_err(|_| {
                     Error::msg("Failed to acquire mutex lock for counting monkey activity")
@@ -191,8 +194,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 );
             }
         }
-        if round == 1 || round == 20 || round % 100 == 0 {
-            println!("Elapsed: {:.4}s", (Instant::now() - start).as_secs_f32());
+        if round == 1
+            || round == 20
+            || round % 100 == 0
+            || (Instant::now() - last_report).as_secs() > 15
+        {
+            let round_duration = (Instant::now() - round_start).as_secs_f32();
+            let avg = elapsed / round as f32;
+            let eta = (TOTAL_ROUNDS - round) as f32 * avg;
+            last_report = Instant::now();
+            println!("Round {round:03} took {round_duration:.4}s | Total Elapsed: {elapsed:.4}s | Avg per Round {avg:.4}s | ETA {eta:.1}s (aka {eta_h:.2}h)", eta_h = eta / 3600.0);
             println!();
         }
     }
