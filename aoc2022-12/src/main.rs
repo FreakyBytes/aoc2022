@@ -2,7 +2,6 @@ use std::{
     collections::HashMap,
     fs::File,
     io::{BufRead, BufReader},
-    ops::Index,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -57,6 +56,63 @@ fn get_size(grid: &Vec<Vec<Elevation>>) -> Vec2 {
     )
 }
 
+fn patch_surrounding(
+    grid: &Vec<Vec<Elevation>>,
+    size: Vec2,
+    distances: &mut HashMap<Vec2, u32>,
+    coord: Vec2,
+    elev: i64,
+    dist: u32,
+) -> bool {
+    let mut changed_something = false;
+    for (x0, y0) in [(-1, 0), (1, 0), (0, -1), (0, 1)] {
+        let (x0, y0) = (coord.0 as i64 + x0, coord.1 as i64 + y0);
+        if x0 < 0 || x0 >= size.0 as i64 || y0 < 0 || y0 >= size.1 as i64 {
+            continue;
+        }
+        drop(x0);
+        drop(y0);
+        let coord0 = Vec2(x0 as usize, y0 as usize);
+        let dist0 = dist + 1;
+
+        match (
+            get_by_coordinate(grid, coord0).unwrap(),
+            distances.get(&coord0),
+        ) {
+            (Elevation::Start, _) => {}
+            (Elevation::End, Some(dist0_old)) if elev >= 25 && *dist0_old > dist0 => {
+                distances.insert(coord0, dist0);
+                changed_something = true;
+
+                println!("Inserted: {coord0:?} End dist={dist0:?}");
+            }
+            (Elevation::End, None) if elev >= 25 => {
+                distances.insert(coord0, dist0);
+                changed_something = true;
+
+                println!("Inserted: {coord0:?} End dist={dist0:?}");
+            }
+            (Elevation::Height(elev0), Some(dist0_old))
+                if *elev0 - elev <= 1 && *dist0_old > dist0 =>
+            {
+                distances.insert(coord0, dist0);
+                changed_something = true;
+
+                println!("Overwrote: {coord0:?} {elev0:?} dist={dist0:?}");
+            }
+            (Elevation::Height(elev0), None) if *elev0 - elev <= 1 => {
+                distances.insert(coord0, dist0);
+                changed_something = true;
+
+                println!("Inserted: {coord0:?} {elev0:?} dist={dist0:?}");
+            }
+            _ => {}
+        }
+    }
+
+    changed_something
+}
+
 fn iterate_distance_map(
     grid: &Vec<Vec<Elevation>>,
     size: Vec2,
@@ -71,125 +127,35 @@ fn iterate_distance_map(
             let dist = distances.get(&coord);
             // println!("{coord:?} {elev:?} dist={dist:?}");
             match (elev, dist) {
-                // (Elevation::Start, _) => {
-                //     distances.insert(coord, 0);
-                //     for (x0, y0) in [(-1, 0), (1, 0), (0, -1), (0, 1)] {
-                //         let (x0, y0) = (x as i64 + x0, y as i64 + y0);
-                //         if x0 < 0 || x0 >= size.0 as i64 || y0 < 0 || y0 >= size.1 as i64 {
-                //             continue;
-                //         }
-                //         let (x0, y0) = (x0 as usize, y0 as usize);
-                //         let coord0 = Vec2(x0, y0);
-                //         match (
-                //             get_by_coordinate(grid, coord0).unwrap(),
-                //             distances.get(&coord0),
-                //         ) {
-                //             (Elevation::Height(0), Some(dist0_old)) if *dist0_old > 1 => {
-                //                 distances.insert(coord0, 1);
-                //                 println!("Inserted: {coord0:?} 1 dist={dist0:?}", dist0 = 1);
-                //             }
-                //             (Elevation::Height(0), None) => {
-                //                 distances.insert(coord0, 1);
-                //                 println!("Inserted: {coord0:?} 1 dist={dist0:?}", dist0 = 1);
-                //             }
-                //             _ => {}
-                //         }
-                //     }
-                // }
+                (Elevation::Start, _) => {
+                    distances.insert(coord, 0);
+                    if patch_surrounding(grid, size, distances, coord, 0, 0) {
+                        changed_something = true;
+                    }
+                }
                 // (Elevation::Start, Some(_)) => {}
-                (Elevation::End, Some(dist)) if changed_something == false => {
+                (Elevation::End, Some(dist)) if changed_something == false && *dist < 10000 => {
                     return Some(*dist);
                 }
                 (Elevation::Height(0), None) => {
                     distances.insert(coord, 0);
+                    changed_something = true;
                     println!("Inserted: {coord:?} {elev:?} dist=0");
-                    for (x0, y0) in [(-1, 0), (1, 0), (0, -1), (0, 1)] {
-                        let (x0, y0) = (x as i64 + x0, y as i64 + y0);
-                        if x0 < 0 || x0 >= size.0 as i64 || y0 < 0 || y0 >= size.1 as i64 {
-                            continue;
-                        }
-                        let (x0, y0) = (x0 as usize, y0 as usize);
-                        let coord0 = Vec2(x0, y0);
-                        match (
-                            get_by_coordinate(grid, coord0).unwrap(),
-                            distances.get(&coord0),
-                        ) {
-                            (Elevation::Height(1), Some(dist0_old)) if *dist0_old > 1 => {
-                                distances.insert(coord0, 1);
-                                changed_something = true;
-
-                                println!("Inserted: {coord0:?} 1 dist={dist0:?}", dist0 = 1);
-                            }
-                            (Elevation::Height(1), None) => {
-                                distances.insert(coord0, 1);
-                                changed_something = true;
-
-                                println!("Inserted: {coord0:?} 1 dist={dist0:?}", dist0 = 1);
-                            }
-                            _ => {}
-                        }
+                    if patch_surrounding(grid, size, distances, coord, 0, 0) {
+                        changed_something = true;
+                    }
+                }
+                (Elevation::Height(0), Some(dist)) if *dist != 0 => {
+                    distances.insert(coord, 0);
+                    changed_something = true;
+                    println!("Inserted: {coord:?} {elev:?} dist=0");
+                    if patch_surrounding(grid, size, distances, coord, 0, 0) {
+                        changed_something = true;
                     }
                 }
                 (Elevation::Height(elev), Some(dist)) => {
-                    let dist = *dist;
-                    for (x0, y0) in [(-1, 0), (1, 0), (0, -1), (0, 1)] {
-                        let (x0, y0) = (x as i64 + x0, y as i64 + y0);
-                        if x0 < 0 || x0 >= size.0 as i64 || y0 < 0 || y0 >= size.1 as i64 {
-                            continue;
-                        }
-                        let (x0, y0) = (x0 as usize, y0 as usize);
-
-                        let coord0 = Vec2(x0, y0);
-                        match (
-                            get_by_coordinate(grid, coord0).unwrap(),
-                            distances.get(&coord0),
-                        ) {
-                            (Elevation::End, Some(dist0_old))
-                                if *elev >= 25 && *dist0_old > dist + 1 =>
-                            {
-                                distances.insert(coord0, dist + 1);
-                                changed_something = true;
-
-                                println!(
-                                    "Inserted: {coord0:?} End dist={dist0:?}",
-                                    dist0 = dist + 1
-                                );
-                            }
-                            (Elevation::End, None) if *elev >= 25 => {
-                                distances.insert(coord0, dist + 1);
-                                changed_something = true;
-
-                                println!(
-                                    "Inserted: {coord0:?} End dist={dist0:?}",
-                                    dist0 = dist + 1
-                                );
-                            }
-                            (Elevation::Height(elev0), Some(dist0_old))
-                                if elev0 - *elev <= 1
-                                    && elev0 - *elev >= 0
-                                    && *dist0_old > dist + 1 =>
-                            {
-                                distances.insert(coord0, dist + 1);
-                                changed_something = true;
-
-                                println!(
-                                    "Inserted: {coord0:?} {elev0:?} dist={dist0:?}",
-                                    dist0 = dist + 1
-                                );
-                            }
-                            (Elevation::Height(elev0), None)
-                                if elev0 - *elev <= 1 && elev0 - *elev >= 0 =>
-                            {
-                                distances.insert(coord0, dist + 1);
-                                changed_something = true;
-
-                                println!(
-                                    "Inserted: {coord0:?} {elev0:?} dist={dist0:?}",
-                                    dist0 = dist + 1
-                                );
-                            }
-                            _ => {}
-                        }
+                    if patch_surrounding(grid, size, distances, coord, *elev, *dist) {
+                        changed_something = true;
                     }
                 }
                 _ => {}
@@ -228,13 +194,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // let mut distances: HashMap<Vec2, u32> = (0..size.0)
     //     .zip(0..size.1)
     //     .map(|(x, y)| (Vec2(x, y), 10000))
-    //     .collect();
+    //     .collect()>;
 
     for _ in 0..1000 {
         let dist = iterate_distance_map(&grid, size, &mut distances);
         // println!("{distances:?}");
         println!();
+        print!("     ");
+        for x in 0..size.0 {
+            print!("{:>3} ", x.to_string());
+        }
+        println!();
         for y in 0..size.1 {
+            print!("{:>4} ", y.to_string());
             for x in 0..size.0 {
                 let coord = Vec2(x, y);
                 // let elev = get_by_coordinate(&grid, coord).unwrap();
