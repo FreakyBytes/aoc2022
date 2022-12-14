@@ -84,8 +84,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         })
         .fold(
             (
-                0,
-                1000,
+                250,
+                750,
                 // START.0 as i32,
                 // START.0 as i32,
                 START.1 as i32,
@@ -208,6 +208,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     dbg!(units, units_at_rest);
+    render_grid(&grid);
 
     Ok(())
 }
