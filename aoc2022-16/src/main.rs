@@ -1,16 +1,17 @@
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{BinaryHeap, HashMap, HashSet, VecDeque},
     fs::File,
     io::{BufRead, BufReader},
 };
 
 use anyhow::{Context, Error};
-use petgraph::{prelude::GraphMap, visit::IntoNeighborsDirected};
+use petgraph::prelude::GraphMap;
 use regex::Regex;
 
 type ValveGraph<'a> = GraphMap<&'a String, u32, petgraph::Directed>;
 type ValveMap = HashMap<String, Valve>;
 static MAX_TIME: usize = 15;
+static SOLUTION_CACHE_SIZE: usize = 30;
 
 #[derive(Debug, Clone)]
 struct Valve {
@@ -19,18 +20,34 @@ struct Valve {
     targets: Vec<String>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 enum WalkStep {
     GoToTunnel(String),
     OpenValve(String),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 struct GraphWalk {
     path: Vec<WalkStep>,
     opened_valves: HashSet<String>,
     flow_rate: u32,
     current_node: String,
+}
+
+impl PartialOrd for GraphWalk {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        if self.flow_rate == other.flow_rate {
+            None
+        } else {
+            Some(self.flow_rate.cmp(&other.flow_rate))
+        }
+    }
+}
+
+impl Ord for GraphWalk {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.flow_rate.cmp(&other.flow_rate)
+    }
 }
 
 impl GraphWalk {
@@ -217,22 +234,67 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     //     std::fs::write(format!("{file_name}.dot"), dot.to_string())?;
     // }
 
-    // let floyd =
-    //     petgraph::algo::floyd_warshall(&graph, |(_src, _dest, flow_rate)| u32::MAX - *flow_rate)
-    //         .map_err(|_negative_cycles| Error::msg("Failed to calculates Floyd-Warshall"))?;
-
-    // dbg!(&floyd);
-
-    // let bf = petgraph::algo::bellman_ford(&graph, start_node)?;
-
     let initial_walk = GraphWalk::new(start_node);
     // dbg!(
     //     &initial_walk,
     //     initial_walk.generate_candidates(&graph, &valves)
     // );
 
-    let max = initial_walk.walk(&graph, &valves);
-    dbg!(&max);
+    // let max = initial_walk.walk(&graph, &valves);
+    // dbg!(&max);
+
+    let mut solutions: Vec<Option<GraphWalk>> = Vec::with_capacity(SOLUTION_CACHE_SIZE * 2 + 1);
+    let mut stack: VecDeque<GraphWalk> = VecDeque::new();
+    stack.push_back(initial_walk);
+
+    while let Some(walk) = stack.pop_front() {
+        if walk.get_minute() >= MAX_TIME {
+            solutions.push(Some(walk));
+
+            if solutions.len() >= SOLUTION_CACHE_SIZE {
+                solutions.sort();
+                solutions.resize(SOLUTION_CACHE_SIZE, None);
+            }
+            continue;
+        }
+
+        // let mut max: Option<Self> = None;
+        // let candidates = self.generate_candidates(graph, valves);
+        // println!(
+        //     "Candidates for {:?} @{:?}: {candidates:?}",
+        //     self.path, self.current_node,
+        // );
+        // if let Some((_, top_prio)) = candidates.first() {
+        //     if *top_prio <= 0 {
+        //         return self;
+        //     }
+        // }
+
+        // for (node, _) in candidates {
+        //     let mut current_walk = self.clone();
+        //     let current_walk = match node {
+        //         WalkStep::OpenValve(_) => {
+        //             current_walk.open_valve(&valves);
+        //             current_walk.walk(graph, valves)
+        //         }
+        //         WalkStep::GoToTunnel(target) => {
+        //             current_walk.go_to_tunnel(target);
+        //             current_walk.walk(graph, valves)
+        //         }
+        //     };
+
+        //     match (&max, current_walk) {
+        //         (None, cw) => max = Some(cw),
+        //         (Some(m), cw) if cw.flow_rate > m.flow_rate => max = Some(cw),
+        //         (Some(m), cw) if cw.flow_rate < m.flow_rate => {
+        //             // Bound! It has no sense to try further candidates - according to the heuristic from `generate_candidates`
+        //             println!("Bound!");
+        //             break;
+        //         }
+        //         _ => {}
+        //     }
+        // }
+    }
 
     Ok(())
 }
