@@ -5,12 +5,12 @@ use std::{
 };
 
 use anyhow::{Context, Error};
-use petgraph::prelude::GraphMap;
+use petgraph::{prelude::GraphMap, visit::IntoNeighborsDirected};
 use regex::Regex;
 
 type ValveGraph<'a> = GraphMap<&'a String, u32, petgraph::Directed>;
 type ValveMap = HashMap<String, Valve>;
-static MAX_TIME: usize = 30;
+static MAX_TIME: usize = 15;
 
 #[derive(Debug, Clone)]
 struct Valve {
@@ -21,8 +21,8 @@ struct Valve {
 
 #[derive(Debug, Clone)]
 enum WalkStep {
-    Tunnel(String),
-    OpenedValve(String),
+    GoToTunnel(String),
+    OpenValve(String),
 }
 
 #[derive(Debug, Clone)]
@@ -36,7 +36,7 @@ struct GraphWalk {
 impl GraphWalk {
     fn new(start_node: &str) -> Self {
         Self {
-            path: Vec::new(),
+            path: vec![WalkStep::GoToTunnel(start_node.to_string())], // Vec::new(),
             opened_valves: HashSet::new(),
             flow_rate: 0,
             current_node: start_node.to_string(),
@@ -47,45 +47,66 @@ impl GraphWalk {
         self.path.len()
     }
 
-    fn move_to_tunnel(&mut self, tunnel: String) {
-        self.path.push(WalkStep::Tunnel(self.current_node.clone()));
+    fn go_to_tunnel(&mut self, tunnel: String) {
         self.current_node = tunnel;
+        self.path
+            .push(WalkStep::GoToTunnel(self.current_node.clone()));
     }
 
     fn open_valve(&mut self, valves: &ValveMap) {
         if let Some(valve) = valves.get(&self.current_node) {
-            self.path
-                .push(WalkStep::OpenedValve(self.current_node.clone()));
             self.opened_valves.insert(self.current_node.clone());
             self.flow_rate += valve.flow_rate;
+            self.path
+                .push(WalkStep::OpenValve(self.current_node.clone()));
         } else {
             panic!("Trying to open valve that does not exist: {self:?}");
         }
     }
 
     fn generate_candidates(&self, graph: &ValveGraph, valves: &ValveMap) -> Vec<(WalkStep, i64)> {
+        let own_valve_opened = self.opened_valves.contains(&self.current_node);
+
         let mut candidates = graph
             .neighbors_directed(&self.current_node, petgraph::Direction::Outgoing)
             .map(|neighbor| {
                 if self.opened_valves.contains(neighbor) {
-                    (WalkStep::Tunnel(neighbor.to_owned()), 0)
+                    (WalkStep::GoToTunnel(neighbor.to_owned()), 0)
                 } else {
-                    (
-                        WalkStep::Tunnel(neighbor.to_owned()),
-                        valves
-                            .get(neighbor)
-                            .map_or(0, |v| v.flow_rate as i64 - self.flow_rate as i64),
-                    )
+                    let mut possible_fr = valves.get(neighbor).map_or(0, |v| {
+                        if self.opened_valves.contains(neighbor) {
+                            0
+                        } else if !own_valve_opened {
+                            // trade-off between opening the current valve of moving to the other node
+                            v.flow_rate as i64 - self.flow_rate as i64
+                        } else {
+                            // trade-off only makes sense, if the current valve is not already open
+                            v.flow_rate as i64
+                        }
+                    });
+
+                    // one step look-ahead
+                    possible_fr += graph
+                        .neighbors_directed(neighbor, petgraph::Direction::Outgoing)
+                        .filter(|&n2| *n2 != *neighbor && *n2 != self.current_node)
+                        .map(|n2| valves.get(n2).map_or(0, |v| v.flow_rate))
+                        .max()
+                        .unwrap_or(0) as i64;
+
+                    (WalkStep::GoToTunnel(neighbor.to_owned()), possible_fr)
                 }
             })
+            // .map(|(neighbour, rating)| {
+            //     graph.
+            // })
             // TODO add look ahead here?
             .collect::<Vec<_>>();
 
         // add self, if not already opened valve
         if let Some(node_flow_rate) = valves.get(&self.current_node).map(|v| v.flow_rate) {
-            if node_flow_rate > 0 && !self.opened_valves.contains(&self.current_node) {
+            if node_flow_rate > 0 && !own_valve_opened {
                 candidates.push((
-                    WalkStep::OpenedValve(self.current_node.clone()),
+                    WalkStep::OpenValve(self.current_node.clone()),
                     node_flow_rate as i64,
                 ));
             }
@@ -95,43 +116,50 @@ impl GraphWalk {
         candidates
     }
 
-    fn walk(self, graph: &ValveGraph, valves: &ValveMap) -> (u32, Vec<Self>) {
+    fn walk(self, graph: &ValveGraph, valves: &ValveMap) -> Self {
         if self.get_minute() >= MAX_TIME {
             // println!("Reached {MAX_TIME}! {self:?}");
-            return (self.flow_rate, vec![self]);
+            return self;
         }
 
-        let mut walks = Vec::new();
-        let mut max: u32 = 0;
+        let mut max: Option<Self> = None;
         let candidates = self.generate_candidates(graph, valves);
-        // println!(
-        //     "Candidates for {:?} + {:?}: {candidates:?}",
-        //     self.path, self.current_node,
-        // );
+        println!(
+            "Candidates for {:?} @{:?}: {candidates:?}",
+            self.path, self.current_node,
+        );
+        if let Some((_, top_prio)) = candidates.first() {
+            if *top_prio <= 0 {
+                return self;
+            }
+        }
+
         for (node, _) in candidates {
             let mut current_walk = self.clone();
-            let (current_max, mut resulting_walks) = match node {
-                WalkStep::OpenedValve(_) => {
+            let current_walk = match node {
+                WalkStep::OpenValve(_) => {
                     current_walk.open_valve(&valves);
                     current_walk.walk(graph, valves)
                 }
-                WalkStep::Tunnel(target) => {
-                    current_walk.move_to_tunnel(target);
+                WalkStep::GoToTunnel(target) => {
+                    current_walk.go_to_tunnel(target);
                     current_walk.walk(graph, valves)
                 }
             };
 
-            walks.append(&mut resulting_walks);
-            if current_max < max {
-                // Bound! It has no sense to try further candidates - according to the heuristic from `generate_candidates`
-                println!("Bound!");
-                break;
-            } else if max == 0 || current_max > max {
-                max = current_max;
+            match (&max, current_walk) {
+                (None, cw) => max = Some(cw),
+                (Some(m), cw) if cw.flow_rate > m.flow_rate => max = Some(cw),
+                (Some(m), cw) if cw.flow_rate < m.flow_rate => {
+                    // Bound! It has no sense to try further candidates - according to the heuristic from `generate_candidates`
+                    println!("Bound!");
+                    break;
+                }
+                _ => {}
             }
         }
 
-        (max, walks)
+        max.unwrap()
     }
 }
 
@@ -203,8 +231,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     //     initial_walk.generate_candidates(&graph, &valves)
     // );
 
-    let (max, walks) = initial_walk.walk(&graph, &valves);
-    dbg!(max, walks.first());
+    let max = initial_walk.walk(&graph, &valves);
+    dbg!(&max);
 
     Ok(())
 }
