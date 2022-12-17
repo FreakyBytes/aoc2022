@@ -27,3 +27,6 @@ members = [
   "aoc2022-24",
   "aoc2022-25",
 ]
+
+[profile.release]
+debug = 1

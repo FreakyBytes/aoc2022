@@ -3,6 +3,7 @@ use std::{
     io::{BufRead, BufReader},
 };
 
+use anyhow::Context;
 use itertools::Itertools;
 use ndarray::{array, Array1, Array2, ArrayBase, Axis, Ix1, Ix2};
 
@@ -205,12 +206,17 @@ fn is_height_colliding(
     x: usize,
     y: usize,
 ) -> bool {
-    for (x0, bottom) in rock_bottom.iter().enumerate() {
-        // dbg!(heights[x + x0], bottom, y - bottom);
-        if heights[x + x0] > y - bottom {
+    for x0 in 0..rock_bottom.len() {
+        if heights[x + x0] > y - rock_bottom[x0] {
             return true;
         }
     }
+    // for (x0, bottom) in rock_bottom.iter().enumerate() {
+    //     // dbg!(heights[x + x0], bottom, y - bottom);
+    //     if heights[x + x0] > y - bottom {
+    //         return true;
+    //     }
+    // }
     false
 }
 
@@ -248,6 +254,13 @@ fn solve2(
                 .collect::<Array1<_>>()
         })
         .collect::<Vec<_>>();
+    let rock_shapes = rock_forms
+        .iter()
+        .map(|rock| {
+            let shape = rock.shape();
+            (shape[0], shape[1])
+        })
+        .collect::<Vec<_>>();
 
     dbg!(&rock_top_heights, &rock_bottom_heights);
 
@@ -258,11 +271,9 @@ fn solve2(
     let mut jet_pos: usize = 0;
 
     for n in 1..=tower_size {
-        // for _ in 1..=25 {
         let rock_bottom = &rock_bottom_heights[rock_idx];
-        let rock_top = &rock_top_heights[rock_idx];
-        let rock_shape = (*rock_bottom.iter().max().unwrap(), rock_bottom.len());
-        // let highest_rock = find_highest_rock(&grid);
+        // let rock_shape = (*rock_bottom.iter().max().unwrap(), rock_bottom.len());
+        let rock_shape = &rock_shapes[rock_idx];
         let mut x: usize = 2;
         let mut y: usize = highest_rock + rock_shape.0 + 3;
 
@@ -273,7 +284,6 @@ fn solve2(
             draw_grid(&rock_forms[rock_idx]);
             println!();
         }
-        rock_idx = (rock_idx + 1) % rock_forms.len();
 
         loop {
             let jet = jet_patterns[jet_pos];
@@ -310,18 +320,24 @@ fn solve2(
                     println!("materialize! @({y}, {x})");
                     println!("{}", heights.iter().map(|h| format!("{h:06}")).join(" "));
                 }
+
+                let rock_top = &rock_top_heights[rock_idx];
                 for (x0, top) in rock_top.iter().enumerate() {
                     // dbg!(x + x0, &heights[x + x0], y - top);
                     heights[x + x0] = y - top;
+                    if heights[x + x0] > highest_rock {
+                        highest_rock = heights[x + x0];
+                    }
                 }
 
-                highest_rock = *heights.iter().max().unwrap();
                 break;
             }
 
             // down, down, down
             y -= 1;
         }
+
+        rock_idx = (rock_idx + 1) % rock_forms.len();
 
         if verbose {
             println!("{}", heights.iter().map(|h| format!("{h:06}")).join(" "));
@@ -339,17 +355,19 @@ fn solve2(
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let file_name = std::env::args().nth(1).expect("No input file supplied!");
-    let jet_patterns = BufReader::new(File::open(file_name)?)
-        .lines()
-        .into_iter()
-        .filter_map(|line| line.ok())
-        .flat_map(|line| line.chars().collect::<Vec<_>>())
-        .map(|c| match c {
-            '<' => Jet::Left,
-            '>' => Jet::Right,
-            _ => panic!("Unknown char {c}"),
-        })
-        .collect::<Vec<_>>();
+    let jet_patterns = BufReader::new(
+        File::open(file_name).with_context(|| "Could not open file: '{file_name}'")?,
+    )
+    .lines()
+    .into_iter()
+    .filter_map(|line| line.ok())
+    .flat_map(|line| line.chars().collect::<Vec<_>>())
+    .map(|c| match c {
+        '<' => Jet::Left,
+        '>' => Jet::Right,
+        _ => panic!("Unknown char {c}"),
+    })
+    .collect::<Vec<_>>();
 
     //
     // EVERYTHING is (Y, X) !!
@@ -387,17 +405,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let tower_size = 2022;
     // let tower_size = 10;
 
-    solve1(
-        // 2022,
-        tower_size,
-        false,
-        &jet_patterns,
-        &rock_forms,
-    );
-    println!("\n****\n");
+    // solve1(
+    //     // 2022,
+    //     tower_size,
+    //     false,
+    //     &jet_patterns,
+    //     &rock_forms,
+    // );
+    // println!("\n****\n");
     solve2(
-        1000000000000,
-        // tower_size,
+        // 1000000000000,
+        tower_size,
         // 2022,
         false,
         &jet_patterns,
