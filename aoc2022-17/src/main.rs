@@ -65,7 +65,7 @@ fn find_highest_rock(grid: &Grid) -> usize {
     grid.axis_iter(Axis(0))
         .enumerate()
         .find(|(_y, row)| row.iter().any(|c| *c))
-        .map_or_else(|| grid.shape()[0] - 1, |(y, _)| y)
+        .map_or_else(|| grid.shape()[0], |(y, _)| y)
 }
 
 fn is_colliding(grid: &Grid, rock: &Grid, x: usize, y: usize) -> bool {
@@ -144,7 +144,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     ];
 
     let max_height = 2022 * 4 + 10;
-    let verbose = true;
+    let verbose = false;
     let mut grid = Grid::default((max_height, 7));
     let mut form_iterator = LoopingIterator::new(&rock_forms);
     // let mut jet_iterator = LoopingIterator::new(&jet_patterns);
@@ -158,16 +158,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // return Ok(());
 
-    // for _ in 1..=2022 {
-    for _ in 1..=2 {
+    for _ in 1..=2022 {
+        // for _ in 1..=5 {
         let rock = form_iterator.next().unwrap();
         let rock_shape = rock.shape();
         let rock_shape = (rock_shape[0], rock_shape[1]);
+        let highest_rock = find_highest_rock(&grid);
         let mut x: usize = 2;
-        let mut y: usize = find_highest_rock(&grid) - 3 - rock_shape.0;
+        let mut y: usize = highest_rock - rock_shape.0 - 3;
 
         if verbose {
             println!("----");
+            println!("Highest Rock: {highest_rock}");
             println!("New Rock: {rock_shape:?} @({y}, {x})");
             draw_grid(rock);
             println!();
@@ -197,11 +199,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             }
 
-            // always moving down
-            // y += 1;
-
             // check if the form can fall any further
-            if y + rock_shape.0 >= max_height - 1 || is_colliding(&grid, rock, x, y + 1) {
+            if y + rock_shape.0 >= max_height || is_colliding(&grid, rock, x, y + 1) {
                 // can't move any further
                 materialize_rock(&mut grid, rock, x, y);
                 if verbose {
@@ -210,6 +209,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 break;
             }
 
+            // down, down, down
             y += 1;
         }
 
@@ -222,7 +222,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!();
     draw_grid(&grid);
     println!();
-    dbg!(find_highest_rock(&grid));
+    let highest_rock = find_highest_rock(&grid);
+    dbg!(highest_rock, max_height - highest_rock);
 
     Ok(())
 }
