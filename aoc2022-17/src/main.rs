@@ -240,11 +240,12 @@ fn solve1(
                     //     offset
                     // );
                     let rocks_to_skip = possible_repetition * (rock_count - cp_rock_count);
+                    println!(
+                        "Found checkpoint after {rock_count} rocks, possible reps: {possible_repetition}, skipping {rocks_to_skip}"
+                    );
+
                     rock_count += rocks_to_skip;
                     final_height += offset;
-                    println!(
-                        "Found checkpoint, possible reps: {possible_repetition}, skipping {rocks_to_skip}"
-                    );
                     seen.clear();
                 }
                 seen.insert(cp, (rock_count, final_height));
