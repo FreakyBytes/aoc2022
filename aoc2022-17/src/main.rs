@@ -125,8 +125,10 @@ fn create_checkpoint_key(
 ) -> Checkpoint {
     let mut tops = [look_back; 7];
     for x in 0..7 {
-        for y in highest_rock..=(highest_rock + look_back).min(max_height) {
-            tops[x] = tops[x].min(y - highest_rock)
+        for y in highest_rock..=(highest_rock + look_back).min(max_height - 1) {
+            if grid[[y, x]] {
+                tops[x] = tops[x].min(y - highest_rock)
+            }
         }
     }
 
