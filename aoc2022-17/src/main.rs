@@ -112,7 +112,7 @@ fn materialize_rock(
 struct Checkpoint {
     rock_idx: usize,
     jet_idx: usize,
-    top_rocks: [usize; 7],
+    top_rocks: usize,
 }
 
 fn create_checkpoint_key(
@@ -124,16 +124,25 @@ fn create_checkpoint_key(
     max_height: usize,
 ) -> Checkpoint {
     let mut tops = [look_back; 7];
+
     for x in 0..7 {
-        for y in highest_rock..=(highest_rock + look_back).min(max_height) {
-            tops[x] = tops[x].min(y - highest_rock)
+        for y in highest_rock..=(highest_rock + look_back).min(max_height - 1) {
+            if grid[[y, x]] {
+                tops[x] = tops[x].min(y - highest_rock)
+            }
         }
+    }
+
+    // fingerprint of top rocks should be sufficient and even better! ;-)
+    let mut top_rocks = 0;
+    for x in 0..7 {
+        top_rocks += 10_usize.pow(x) * (max_height - tops[x as usize]);
     }
 
     Checkpoint {
         rock_idx,
         jet_idx,
-        top_rocks: tops,
+        top_rocks,
     }
 }
 
