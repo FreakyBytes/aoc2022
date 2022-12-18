@@ -1,4 +1,5 @@
 use std::{
+    collections::{HashMap, HashSet},
     fs::File,
     io::{BufRead, BufReader},
 };
@@ -107,18 +108,24 @@ fn materialize_rock(
     }
 }
 
+fn create_checkpoint_key(grid: &Grid, highest_rock: usize) -> [usize; 9] {
+    [0; 9]
+}
+
 fn solve1(
     tower_size: usize,
     verbose: bool,
     jet_patterns: &Vec<Jet>,
     rock_forms: &Vec<ArrayBase<impl ndarray::Data<Elem = bool>, Ix2>>,
-) {
+) -> usize {
     let max_height = tower_size * 4 + 10;
     let mut grid = Grid::default((max_height, 7));
     let mut highest_rock = max_height;
-    let mut form_iterator = LoopingIterator::new(rock_forms);
+    // let mut form_iterator = LoopingIterator::new(rock_forms);
     // let mut jet_iterator = LoopingIterator::new(&jet_patterns);
-    let mut jet_pos = 0;
+    let mut rock_idx: usize = 0;
+    let mut jet_idx: usize = 0;
+    let mut rock_count: usize = 1;
 
     // let rock = rock_forms.get(1).unwrap();
     // dbg!(is_colliding(&grid, rock, 0, max_height - 10));
@@ -126,11 +133,10 @@ fn solve1(
     // draw_grid(&grid);
     // dbg!(is_colliding(&grid, rock, 0, max_height - 10));
 
-    // return Ok(());
+    let mut seen = HashMap::<[u64; 7], ArrayBase<ndarray::OwnedRepr<bool>, Ix2>>::new();
 
-    for _ in 1..=tower_size {
-        // for _ in 1..=25 {
-        let rock = form_iterator.next().unwrap();
+    while rock_count <= tower_size {
+        let rock = &rock_forms[rock_idx];
         let rock_shape = rock.shape();
         let rock_shape = (rock_shape[0], rock_shape[1]);
         // let highest_rock = find_highest_rock(&grid);
@@ -146,8 +152,8 @@ fn solve1(
         }
 
         loop {
-            let jet = jet_patterns[jet_pos];
-            jet_pos = (jet_pos + 1) % jet_patterns.len();
+            let jet = jet_patterns[jet_idx];
+            jet_idx = (jet_idx + 1) % jet_patterns.len();
 
             match jet {
                 Jet::Left if x > 0 && !is_colliding(&grid, rock, x - 1, y) => {
@@ -173,6 +179,7 @@ fn solve1(
             if y + rock_shape.0 >= max_height || is_colliding(&grid, rock, x, y + 1) {
                 // can't move any further
                 materialize_rock(&mut grid, rock, x, y);
+                rock_count += 1;
                 highest_rock = highest_rock.min(y);
                 if verbose {
                     println!("materialize!");
@@ -183,6 +190,8 @@ fn solve1(
             // down, down, down
             y += 1;
         }
+
+        rock_idx = (rock_idx + 1) % rock_forms.len();
 
         if verbose {
             println!();
@@ -195,9 +204,11 @@ fn solve1(
     println!();
     dbg!(
         highest_rock,
-        find_highest_rock(&grid),
+        // find_highest_rock(&grid),
         max_height - highest_rock
     );
+
+    max_height - highest_rock
 }
 
 fn is_height_colliding(
@@ -402,25 +413,37 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         array![[true, true], [true, true],],
     ];
 
-    let tower_size = 2022;
     // let tower_size = 10;
 
-    // solve1(
-    //     // 2022,
-    //     tower_size,
-    //     false,
-    //     &jet_patterns,
-    //     &rock_forms,
-    // );
-    // println!("\n****\n");
-    solve2(
-        // 1000000000000,
-        tower_size,
-        // 2022,
+    dbg!(
+        rock_forms.len(),
+        jet_patterns.len(),
+        rock_forms.len() * jet_patterns.len()
+    );
+
+    solve1(
+        2022,
+        // tower_size,
         false,
         &jet_patterns,
         &rock_forms,
     );
+
+    // let kgv = rock_forms.len() * jet_patterns.len();
+    // let height_for_kgv = solve1(kgv, false, &jet_patterns, &rock_forms);
+    // let result = (1000000000000_f64 / kgv as f64) * height_for_kgv as f64;
+    // dbg!(kgv, height_for_kgv, result);
+    // dbg!(1514285714288_f64 - result);
+
+    // println!("\n****\n");
+    // solve2(
+    //     // 1000000000000,
+    //     tower_size,
+    //     // 2022,
+    //     false,
+    //     &jet_patterns,
+    //     &rock_forms,
+    // );
 
     Ok(())
 }
