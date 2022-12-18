@@ -143,11 +143,11 @@ fn solve1(
     jet_patterns: &Vec<Jet>,
     rock_forms: &Vec<ArrayBase<impl ndarray::Data<Elem = bool>, Ix2>>,
 ) -> usize {
-    let look_back: usize = 20;
+    let look_back: usize = 1000;
     let max_height = (num_rocks_to_drop * 4 + 10).min(2022 * 8 + 10);
     let mut grid = Grid::default((max_height, 7));
     let mut highest_rock = max_height;
-    let mut final_height = max_height;
+    let mut final_height = 0;
     // let mut form_iterator = LoopingIterator::new(rock_forms);
     // let mut jet_iterator = LoopingIterator::new(&jet_patterns);
     let mut rock_idx: usize = 0;
@@ -160,7 +160,7 @@ fn solve1(
     // draw_grid(&grid);
     // dbg!(is_colliding(&grid, rock, 0, max_height - 10));
 
-    let mut seen = HashMap::<Checkpoint, (usize, usize, usize)>::new();
+    let mut seen = HashMap::<Checkpoint, (usize, usize)>::new();
 
     while rock_count <= num_rocks_to_drop {
         let rock = &rock_forms[rock_idx];
@@ -209,7 +209,7 @@ fn solve1(
                 rock_count += 1;
                 let offset = highest_rock - highest_rock.min(y);
                 highest_rock -= offset;
-                final_height -= offset;
+                final_height += offset;
                 if verbose {
                     println!("materialize!");
                 }
@@ -226,12 +226,12 @@ fn solve1(
                     look_back,
                     max_height,
                 );
-                if let Some((cp_rock_count, cp_highest_rock, cp_final_height)) = seen.get(&cp) {
+                if let Some((cp_rock_count, cp_final_height)) = seen.get(&cp) {
                     let remaining = num_rocks_to_drop - rock_count;
                     let possible_repetition: usize = remaining / (rock_count - cp_rock_count);
                     // let possible_repetition =
                     //     num::Integer::div_floor(&remaining, &(rock_count - cp_rock_count));
-                    let offset = possible_repetition * (cp_final_height - final_height);
+                    let offset = possible_repetition * (final_height - cp_final_height);
                     // dbg!(
                     //     num_rocks_to_drop,
                     //     rock_count,
@@ -241,13 +241,13 @@ fn solve1(
                     // );
                     let rocks_to_skip = possible_repetition * (rock_count - cp_rock_count);
                     rock_count += rocks_to_skip;
-                    final_height -= offset;
+                    final_height += offset;
                     println!(
                         "Found checkpoint, possible reps: {possible_repetition}, skipping {rocks_to_skip}"
                     );
                     seen.clear();
                 }
-                seen.insert(cp, (rock_count, highest_rock, final_height));
+                seen.insert(cp, (rock_count, final_height));
                 break;
             }
 
@@ -271,163 +271,11 @@ fn solve1(
         highest_rock,
         max_height - highest_rock,
         final_height,
-        max_height - final_height,
+        // max_height - final_height,
     );
 
-    max_height - final_height
-}
-
-fn is_height_colliding(
-    heights: &ArrayBase<impl ndarray::Data<Elem = usize>, Ix1>,
-    rock_bottom: &ArrayBase<impl ndarray::Data<Elem = usize>, Ix1>,
-    x: usize,
-    y: usize,
-) -> bool {
-    for x0 in 0..rock_bottom.len() {
-        if heights[x + x0] > y - rock_bottom[x0] {
-            return true;
-        }
-    }
-    // for (x0, bottom) in rock_bottom.iter().enumerate() {
-    //     // dbg!(heights[x + x0], bottom, y - bottom);
-    //     if heights[x + x0] > y - bottom {
-    //         return true;
-    //     }
-    // }
-    false
-}
-
-fn solve2(
-    tower_size: usize,
-    verbose: bool,
-    jet_patterns: &Vec<Jet>,
-    rock_forms: &Vec<ArrayBase<impl ndarray::Data<Elem = bool>, Ix2>>,
-) {
-    let rock_top_heights = rock_forms
-        .iter()
-        .map(|rock| {
-            rock.axis_iter(Axis(1))
-                .map(|col| {
-                    col.iter()
-                        .enumerate()
-                        .find(|(_, c)| **c)
-                        .map_or(0, |(y, _)| y)
-                })
-                .collect::<Array1<_>>()
-        })
-        .collect::<Vec<_>>();
-    let rock_bottom_heights = rock_forms
-        .iter()
-        .map(|rock| {
-            let rock_height = rock.shape()[0];
-            rock.axis_iter(Axis(1))
-                .map(|col| {
-                    col.iter()
-                        .rev()
-                        .enumerate()
-                        .find(|(_, c)| **c)
-                        .map_or(0, |(y, _)| rock_height - y)
-                })
-                .collect::<Array1<_>>()
-        })
-        .collect::<Vec<_>>();
-    let rock_shapes = rock_forms
-        .iter()
-        .map(|rock| {
-            let shape = rock.shape();
-            (shape[0], shape[1])
-        })
-        .collect::<Vec<_>>();
-
-    dbg!(&rock_top_heights, &rock_bottom_heights);
-
-    let mut heights = Array1::<usize>::zeros(7);
-    let mut highest_rock = 0;
-    // let mut form_iterator = LoopingIterator::new(&(0..rock_forms.len()).collect::<Vec<usize>>());
-    let mut rock_idx: usize = 0;
-    let mut jet_pos: usize = 0;
-
-    for n in 1..=tower_size {
-        let rock_bottom = &rock_bottom_heights[rock_idx];
-        // let rock_shape = (*rock_bottom.iter().max().unwrap(), rock_bottom.len());
-        let rock_shape = &rock_shapes[rock_idx];
-        let mut x: usize = 2;
-        let mut y: usize = highest_rock + rock_shape.0 + 3;
-
-        if verbose {
-            println!("----");
-            println!("Highest Rock: {highest_rock}");
-            println!("New Rock #{rock_idx} {rock_shape:?} @({y}, {x})");
-            draw_grid(&rock_forms[rock_idx]);
-            println!();
-        }
-
-        loop {
-            let jet = jet_patterns[jet_pos];
-            jet_pos = (jet_pos + 1) % jet_patterns.len();
-
-            match jet {
-                Jet::Left if x > 0 && !is_height_colliding(&heights, rock_bottom, x - 1, y) => {
-                    x -= 1;
-                    if verbose {
-                        println!("left!");
-                    }
-                }
-                Jet::Right
-                    if x + 1 <= 7 - rock_shape.1
-                        && !is_height_colliding(&heights, rock_bottom, x + 1, y) =>
-                {
-                    x += 1;
-                    if verbose {
-                        println!("right!");
-                    }
-                }
-                _ => {
-                    if verbose {
-                        println!("{jet:?} - but no action");
-                    }
-                }
-            }
-
-            // dbg!(y, y + rock_shape.0);
-            // check if the form can fall any further
-            if y - rock_shape.0 == 0 || is_height_colliding(&heights, rock_bottom, x, y - 1) {
-                // can't move any further
-                if verbose {
-                    println!("materialize! @({y}, {x})");
-                    println!("{}", heights.iter().map(|h| format!("{h:06}")).join(" "));
-                }
-
-                let rock_top = &rock_top_heights[rock_idx];
-                for (x0, top) in rock_top.iter().enumerate() {
-                    // dbg!(x + x0, &heights[x + x0], y - top);
-                    heights[x + x0] = y - top;
-                    if heights[x + x0] > highest_rock {
-                        highest_rock = heights[x + x0];
-                    }
-                }
-
-                break;
-            }
-
-            // down, down, down
-            y -= 1;
-        }
-
-        rock_idx = (rock_idx + 1) % rock_forms.len();
-
-        if verbose {
-            println!("{}", heights.iter().map(|h| format!("{h:06}")).join(" "));
-        } else if n % 10000000 == 0 {
-            println!(
-                "{n} / {tower_size} ({:.2}%)",
-                (n as f64 / tower_size as f64) * 100.
-            )
-        }
-    }
-
-    println!("{}", heights.iter().map(|h| format!("{h:06}")).join(" "));
-    println!("Highest Rock: {highest_rock}");
+    // max_height - final_height
+    final_height
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
