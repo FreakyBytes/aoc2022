@@ -1,0 +1,12 @@
+VOID = { " " }
+SPACE = { "." }
+ROCK = { "#" }
+map_row = { (VOID | SPACE | ROCK)+ ~ NEWLINE }
+
+step = { ASCII_DIGIT+ }
+LEFT = { "L" }
+RIGHT = { "R" }
+// direction = { LEFT | RIGHT }
+walk_rules = { (step | LEFT | RIGHT)+ }
+
+input = { map_row+ ~ NEWLINE ~ walk_rules }
