@@ -37,8 +37,8 @@ impl Ord for Number {
     }
 }
 
-fn print_numbers(numbers: &Vec<Number>) {
-    let mut numbers = numbers.clone();
+fn print_numbers(numbers: &[Number]) {
+    let mut numbers: Vec<Number> = numbers.to_vec();
     numbers.sort();
 
     print!("idx  ");
@@ -60,63 +60,8 @@ fn print_numbers(numbers: &Vec<Number>) {
     println!();
 }
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let file_name = std::env::args().nth(1).expect("No input file supplied!");
-    let mut numbers = BufReader::new(
-        File::open(file_name).with_context(|| "Could not open file: '{file_name}'")?,
-    )
-    .lines()
-    .into_iter()
-    .filter_map(|line| line.ok())
-    .enumerate()
-    .map(|(id, line)| -> Result<_, Error> {
-        Ok(Number {
-            id,
-            idx: id as i64,
-            value: line.parse()?,
-        })
-    })
-    .collect::<Result<Vec<Number>, _>>()?;
+fn do_the_mix(numbers: &mut [Number]) {
     let size = numbers.len();
-
-    print_numbers(&numbers);
-    println!();
-
-    // let mut idx: usize = 0;
-    // let mut already_mixed: BTreeSet<usize> = BTreeSet::new();
-    // while idx < numbers.len() && already_mixed.len() < numbers.len() {
-    //     let num = &numbers[idx];
-    //     println!("[{idx}] {num:?}");
-    //     if already_mixed.contains(&num.id) || num.value == 0 {
-    //         idx += 1;
-    //         continue;
-    //     }
-
-    //     let new_pos = (idx as i64 + num.value) % (numbers.len() as i64);
-    //     let new_pos = if new_pos >= 0 {
-    //         new_pos as usize
-    //     } else {
-    //         (numbers.len() as i64 + new_pos - 1) as usize
-    //     };
-    //     dbg!(&new_pos);
-
-    //     let num = numbers.remove(idx);
-    //     already_mixed.insert(num.id);
-    //     numbers.insert(new_pos, num);
-
-    //     if new_pos > idx {
-    //         // we moved the number forward, so on the current position a now new number appeared
-    //     } else if new_pos <= idx {
-    //         // we moved the number behind, to keep up, we need to move forward
-    //         // - or -
-    //         // the index remained the same, we need to move forward
-    //         idx += 1
-    //     }
-
-    //     print_numbers(&numbers);
-    //     println!();
-    // }
-
     for oidx in 0..size {
         let num = numbers[oidx].clone();
         println!("[{oidx}] {num:?}");
@@ -144,7 +89,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             if num.idx < new_pos {
                 // moved forwards
-                if num.idx < num2.idx && num2.idx <= new_pos {
+                if num2.idx > num.idx && num2.idx <= new_pos {
                     num2.idx -= 1;
                 }
             } else if new_pos < num.idx {
@@ -160,6 +105,50 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         // print_numbers(&numbers);
         // println!();
+    }
+}
+
+fn solve1(mut numbers: Vec<Number>) -> Result<i64, Error> {
+    let size = numbers.len();
+
+    do_the_mix(&mut numbers);
+
+    println!("\n====\n");
+    numbers.sort();
+    // final idx fix, for easier accessing
+    let mut zero_idx: Option<usize> = None;
+    for (idx, num) in numbers.iter_mut().enumerate() {
+        num.idx = idx as i64;
+        if num.value == 0 {
+            zero_idx = Some(idx);
+        }
+    }
+
+    print_numbers(&numbers);
+
+    let zero_idx = zero_idx.ok_or_else(|| Error::msg("Failed to find index of 0"))?;
+    let num1000 = &numbers[(zero_idx + 1000) % size];
+    let num2000 = &numbers[(zero_idx + 2000) % size];
+    let num3000 = &numbers[(zero_idx + 3000) % size];
+    println!("1000: {num1000:?}");
+    println!("2000: {num2000:?}");
+    println!("3000: {num3000:?}");
+
+    let password = num1000.value + num2000.value + num3000.value;
+    dbg!(&password);
+
+    Ok(password)
+}
+
+fn solve2(mut numbers: Vec<Number>) -> Result<i64, Error> {
+    static DECRYPTION_KEY: i64 = 811589153;
+    numbers
+        .iter_mut()
+        .for_each(|num| num.value *= DECRYPTION_KEY);
+    let size = numbers.len();
+
+    for _ in 0..10 {
+        do_the_mix(&mut numbers);
     }
 
     println!("\n====\n");
@@ -184,7 +173,34 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("3000: {num3000:?}");
 
     let password = num1000.value + num2000.value + num3000.value;
-    dbg!(password);
+    dbg!(&password);
+
+    Ok(password)
+}
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let file_name = std::env::args().nth(1).expect("No input file supplied!");
+    let mut numbers = BufReader::new(
+        File::open(file_name).with_context(|| "Could not open file: '{file_name}'")?,
+    )
+    .lines()
+    .into_iter()
+    .filter_map(|line| line.ok())
+    .enumerate()
+    .map(|(id, line)| -> Result<_, Error> {
+        Ok(Number {
+            id,
+            idx: id as i64,
+            value: line.parse()?,
+        })
+    })
+    .collect::<Result<Vec<Number>, _>>()?;
+
+    // print_numbers(&numbers);
+    // println!();
+
+    // solve1(numbers)?;
+    solve2(numbers)?;
 
     Ok(())
 }
