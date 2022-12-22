@@ -1,7 +1,7 @@
 use anyhow::{Context, Error, Result};
 use glam::{IVec2, UVec2};
 use itertools::Itertools;
-use parser::{parse_input, Grid, GridCell};
+use parser::{parse_input, Grid, GridCell, WalkRule};
 
 use crate::parser::Direction;
 
@@ -82,12 +82,10 @@ fn get_next_grid_cell(grid: &Grid, position: UVec2, direction: &Direction) -> (U
     }
 }
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let file_name = std::env::args().nth(1).expect("No input file supplied!");
-    let (mut grid, walk_rules) = parse_input(&file_name)?;
-    dbg!(&walk_rules);
-
+fn solve1(mut grid: Grid, walk_rules: &Vec<WalkRule>) -> Result<u32> {
     visualize_grid(&grid);
+
+    // let mut grid = grid.clone();
     let mut walk_direction = Direction::East;
     let mut position: UVec2 = get_start_position(&grid)?;
     grid[position.y as usize][position.x as usize] = GridCell::Empty(Some(walk_direction.clone()));
@@ -124,14 +122,30 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             }
         }
-        println!("----");
+        println!("\n----\n");
         visualize_grid(&grid);
     }
 
     println!();
     dbg!(position, &walk_direction);
     let password = (1000 * (position.y + 1)) + (4 * (position.x + 1)) + (walk_direction as u32);
-    dbg!(password);
+    dbg!(&password);
+
+    Ok(password)
+}
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let file_name = std::env::args().nth(1).expect("No input file supplied!");
+    let (grid, walk_rules) = parse_input(&file_name)?;
+    dbg!(&walk_rules);
+
+    solve1(grid.clone(), &walk_rules)?;
+
+    // 02
+    // find cutting points
+    // use them to split into faces
+    // store immediate adjacency of faces
+    // profit
 
     Ok(())
 }
